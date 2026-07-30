@@ -37,6 +37,13 @@ AGENT_NAMES = ("red", "blue")
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path, help="JSON config file to load")
     parser.add_argument("--grid-size", type=int, help="grid width and height")
+    parser.add_argument(
+        "--goal",
+        type=int,
+        nargs=2,
+        metavar=("ROW", "COL"),
+        help="goal cell; defaults to the bottom-right corner of the grid",
+    )
     parser.add_argument("--seed", type=int, help="random seed (default 0)")
     parser.add_argument(
         "--render",
@@ -108,14 +115,51 @@ _CONFIG_OVERRIDES = (
 )
 
 
+def _fit_to_grid(config: Config, size: int, explicit_goal: bool) -> Dict[str, object]:
+    """Keep the goal and starts inside a resized grid.
+
+    ``--grid-size 4`` on a config whose goal is (5, 5) would otherwise be an
+    instant validation error, which is a poor experience for the single most
+    obvious flag in the tool.
+    """
+    fixes: Dict[str, object] = {}
+    last = size - 1
+
+    def clamp(pos):
+        return (max(0, min(last, pos[0])), max(0, min(last, pos[1])))
+
+    if not explicit_goal and (config.goal[0] > last or config.goal[1] > last):
+        fixes["goal"] = (last, last)
+    goal = fixes.get("goal", config.goal)
+
+    for key in ("red_start", "blue_start"):
+        start = clamp(getattr(config, key))
+        if start != getattr(config, key):
+            fixes[key] = start
+    if any(fixes.get(k, getattr(config, k)) == goal for k in ("red_start", "blue_start")):
+        # A clamped start landing on the goal would make the episode trivial.
+        fixes.setdefault("red_start", config.red_start)
+        for key in ("red_start", "blue_start"):
+            if fixes.get(key, getattr(config, key)) == goal:
+                fixes[key] = (0, 0) if goal != (0, 0) else (0, 1)
+    return fixes
+
+
 def config_from_args(args: argparse.Namespace) -> Config:
     """Load the config file (if any) and apply CLI overrides on top."""
     config = Config.from_file(args.config) if getattr(args, "config", None) else Config()
-    overrides = {
+    overrides: Dict[str, object] = {
         key: getattr(args, key)
         for key in _CONFIG_OVERRIDES
         if getattr(args, key, None) is not None
     }
+
+    goal = getattr(args, "goal", None)
+    if goal is not None:
+        overrides["goal"] = (goal[0], goal[1])
+    if args.grid_size is not None:
+        overrides.update(_fit_to_grid(config, args.grid_size, explicit_goal=goal is not None))
+
     if getattr(args, "headless", False):
         overrides["show_training"] = False
     if overrides:
