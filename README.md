@@ -1,129 +1,194 @@
-# RL Bot - Two-Agent Q-Learning Navigation
+# RL Bot — Two-Agent Q-Learning Navigation
 
-A reinforcement learning project featuring two agents (Red and Blue) learning to navigate a grid environment to reach a goal using Q-learning with experience replay.
+Two independent tabular Q-learning agents (**red** and **blue**) learn to cross a
+grid world to a shared goal, around obstacles, and their learned policies are
+checked against the true shortest path found by breadth-first search.
 
-## Overview
+Training runs headless by default, so it works over SSH and in CI; the Pygame
+window is an optional view onto the same loop.
 
-This project implements a multi-agent reinforcement learning environment where two agents independently learn optimal navigation policies using Q-learning. The agents must navigate from their starting positions to a goal while avoiding revisiting cells and minimizing the number of steps taken.
+```
+$ python main.py --headless --quiet
 
-## Features
+Training summary:
+  red   best=10 optimal=10 success_rate=1.00 states=35
+  blue  best=10 optimal=10 success_rate=1.00 states=35
+  red   steps moving avg: first10=39.8 last=10.0
+  blue  steps moving avg: first10=35.2 last=10.6
 
-- **Two Independent Agents**: Red and Blue agents learning simultaneously
-- **Q-Learning Algorithm**: Classic reinforcement learning with epsilon-greedy exploration
-- **Experience Replay**: Replay buffer for improved learning from successful episodes
-- **Real-time Visualization**: Pygame-based visual representation of the learning process
-- **Adaptive Termination**: Early termination for agents stuck in loops
-- **Progress Validation**: Policy validation after training completion
-
-## Environment Details
-
-- **Grid Size**: 6x6 grid world
-- **Start Position**: Both agents start at (0, 0)
-- **Goal Position**: (5, 5)
-- **Actions**: 4 directional movements (Up, Down, Left, Right)
-- **Rewards**:
-  - Goal reached: +100
-  - Step penalty: -1
-  - Revisiting penalty: -5
-  - Loop penalty: -10
-
-## Algorithm Components
-
-### Q-Learning Parameters
-- **Learning Rate (α)**: 0.2
-- **Discount Factor (γ)**: 0.95
-- **Exploration Rate (ε)**: Starts at 1.0, decays to 0.02
-- **Epsilon Decay**: 0.92 per episode
-
-### Experience Replay
-- Buffer size: 8 successful episodes per agent
-- Replay frequency: Every 10 episodes
-- Sample size: 3 episodes for additional training
-
-## Installation
-
-### Prerequisites
-```bash
-pip install pygame numpy
+Validating greedy policies:
+  red   SUCCESS in 10 steps (optimal 10)
+  blue  SUCCESS in 10 steps (optimal 10)
 ```
 
-### Running the Project
+## Install
+
 ```bash
-python main.py
+git clone https://github.com/SdSarthak/RL-Bots.git
+cd RL-Bots
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS / Linux
+pip install -r requirements.txt
 ```
+
+Python 3.8 or newer. There is **no dataset to download** — the environment is
+generated from the config, so a fresh clone trains in a couple of seconds.
+
+`pygame` is only needed for the window. If it is missing or no display is
+available, the CLI says so and continues headless.
+
+## Usage
+
+```bash
+python main.py                                  # train with the window, then replay
+python main.py --headless --quiet               # train silently, print the summary
+python -m rlbot train --episodes 300 --seed 7   # same thing, module form
+python -m rlbot show --config configs/maze.json # print the board and optimal distances
+```
+
+### Commands
+
+| Command | What it does |
+| --- | --- |
+| `train` | Trains both agents, validates the greedy policies, optionally saves artifacts, then animates the learned paths. Default command, so the subcommand may be omitted. |
+| `replay` | Loads Q-tables saved by `train --save-dir` and walks them greedily. |
+| `show` | Prints the board as ASCII with each agent's optimal distance to the goal. |
+
+### Useful flags
+
+| Flag | Meaning |
+| --- | --- |
+| `--config PATH` | JSON config file (see `configs/`). |
+| `--headless` | Never open a window. |
+| `--render pygame\|ascii\|none` | Pick the renderer explicitly. |
+| `--grid-size N` | Resize the board; the default goal follows the bottom-right corner. |
+| `--goal ROW COL` | Place the goal yourself. |
+| `--episodes`, `--max-steps` | Training budget. |
+| `--alpha`, `--gamma`, `--epsilon-start`, `--epsilon-decay`, `--epsilon-min` | Q-learning hyperparameters. |
+| `--seed N` | Seed for reproducible runs. |
+| `--save-dir DIR` | Write `red.json`, `blue.json`, `history.csv`, `summary.json` and `config.json`. |
+| `--quiet` | Suppress the per-episode log. |
+
+Exit code is `0` when both greedy policies reach the goal, `1` when one does
+not, and `2` on a bad or unsolvable configuration.
+
+### Saving and replaying a run
+
+```bash
+python -m rlbot train --config configs/maze.json --headless --save-dir runs/maze
+python -m rlbot replay --load-dir runs/maze
+```
+
+`replay` picks up `runs/maze/config.json` automatically, so the board matches the
+one the agents were trained on. `runs/` is gitignored.
 
 ## Configuration
 
-You can modify the following parameters in the `main.py` file:
+Every tunable lives on `rlbot.config.Config` and can be supplied as JSON. Keys
+you leave out fall back to the defaults, and unknown keys are rejected rather
+than silently ignored.
 
-```python
-GRID_SIZE = 6          # Size of the grid environment
-CELL_SIZE = 50         # Visual cell size in pixels
-FPS = 20               # Animation speed
-EPISODES = 80          # Number of training episodes
-ALPHA = 0.2            # Learning rate
-GAMMA = 0.95           # Discount factor
-EPSILON_START = 1.0    # Initial exploration rate
-EPSILON_DECAY = 0.92   # Exploration decay rate
-EPSILON_MIN = 0.02     # Minimum exploration rate
-MAX_STEPS = 200        # Maximum steps per episode
-SHOW_TRAINING = True   # Show visualization during training
+```json
+{
+  "grid_size": 8,
+  "red_start": [0, 0],
+  "blue_start": [7, 0],
+  "goal": [7, 7],
+  "obstacles": [[1, 1], [1, 2], [3, 4]],
+  "episodes": 400,
+  "alpha": 0.3,
+  "gamma": 0.97,
+  "epsilon_decay": 0.985,
+  "seed": 7
+}
 ```
 
-## How It Works
+Two examples ship with the repo:
 
-1. **Training Phase**: 
-   - Agents explore the environment using epsilon-greedy policy
-   - Q-values are updated using the Q-learning algorithm
-   - Successful episodes are stored in replay buffers
-   - Periodic replay training improves convergence
+- `configs/default.json` — the open 6x6 board, both agents from `(0, 0)` to `(5, 5)`.
+- `configs/maze.json` — an 8x8 serpentine maze with dead ends and separate starts.
 
-2. **Validation Phase**:
-   - Greedy policies are tested to ensure goal reachability
-   - Validation results are displayed
+## How it works
 
-3. **Replay Phase**:
-   - Final demonstration using purely greedy policies
-   - Shows the learned optimal (or near-optimal) paths
+**Environment** (`rlbot/environment.py`) — a square grid. Moves off the edge are
+clamped and moves into an obstacle are refused, so the state space stays closed
+and the Q-table stays keyed by position. A BFS gives the true shortest path,
+which is used both to reject unsolvable configs before training and to report
+how close a learned policy came to optimal.
 
-## Visual Interface
+**Rewards** — `+100` for the goal, `-1` per step, an extra `-5` for stepping back
+onto a visited cell, and `-10` when an agent is cut loose for circling.
 
-- **Red Agent**: Red square representing the first agent
-- **Blue Agent**: Blue square representing the second agent
-- **Goal**: Green square at position (5, 5)
-- **Visited Paths**: Light colored trails showing agent movement history
-- **Grid**: Gray grid lines for position reference
+**Agent** (`rlbot/agent.py`) — epsilon-greedy over the actions that actually move
+and prefer unvisited cells, falling back to any legal move so a boxed-in agent
+never deadlocks. Terminal transitions do not bootstrap: the goal has no
+successor, so folding `gamma * max Q(goal)` back in would inflate every value on
+the board without bound.
 
-## Performance Metrics
+**Replay** (`rlbot/replay.py`) — the shortest successful episodes are kept and
+replayed in reverse, which carries the terminal reward all the way to the start
+of the trajectory in a single pass. That is what makes 80 episodes enough on the
+6x6 board.
 
-The system tracks:
-- Steps taken per episode for each agent
-- Best performance achieved
-- Replay buffer statistics
-- Final validation results
+**Trainer** (`rlbot/trainer.py`) — runs both agents in lockstep, decays epsilon
+per episode, replays every `replay_frequency` episodes and records a full
+learning curve. The renderer is injected, so the algorithm is identical headless
+and windowed.
 
-## Future Enhancements
+### Package layout
 
-- Multi-agent coordination and communication
-- Different reward structures
-- Larger grid environments
-- Obstacle avoidance
-- Deep Q-Networks (DQN) implementation
-- Comparative analysis with other RL algorithms
+```
+rlbot/
+  config.py        validated dataclass config, JSON load/save
+  environment.py   grid dynamics, rewards, BFS shortest path
+  agent.py         tabular Q-learning agent, Q-table persistence
+  replay.py        episode replay buffer
+  trainer.py       training loop, greedy rollouts, metrics
+  visualizer.py    Pygame and ASCII renderers
+  cli.py           argument parsing and commands
+configs/           example JSON configurations
+tests/             pytest suite (no dataset, no display)
+```
+
+## Controls
+
+While the Pygame window is open, `Esc`, `Q` or closing the window stops training
+early and the run still reports what it learned.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+94 tests, all deterministic and offline. They cover grid dynamics and obstacle
+handling, terminal-aware Q-updates, replay eviction and back-propagation,
+run-to-run reproducibility under a fixed seed, convergence to the BFS-optimal
+path on both an open board and a maze, artifact writing, and CLI exit codes.
+
+## Using it as a library
+
+```python
+from rlbot import Config, train
+from rlbot.trainer import rollout_greedy, starts_for
+
+config = Config(grid_size=8, goal=(7, 7), obstacles=[(1, 1), (1, 2)], episodes=300)
+result = train(config)
+
+print(result.summary())
+path = rollout_greedy(result.agents["red"], result.env, starts_for(config)["red"])
+print(path.steps, "steps, optimal is", result.env.optimal_steps((0, 0)))
+```
+
+## Roadmap
+
+- Agent-to-agent coordination instead of two independent learners
+- Deep Q-Networks for grids too large to tabulate
+- Stochastic transitions and moving goals
+- Q-value heatmap overlay in the renderer
 
 ## License
 
-This project is open source and available under the MIT License.
-
-## Contributing
-
-Feel free to contribute by:
-- Reporting bugs
-- Suggesting new features
-- Improving the algorithm
-- Adding new visualization features
-- Optimizing performance
-
-## Author
-
-Created as a reinforcement learning exploration project demonstrating multi-agent Q-learning with experience replay.
+MIT — see [LICENSE](LICENSE).

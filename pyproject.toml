@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlbot"
+version = "2.0.0"
+description = "Two-agent tabular Q-learning navigation on a grid world"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Sarthak Doshi" }]
+keywords = ["reinforcement-learning", "q-learning", "grid-world", "multi-agent"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.21.0"]
+
+[project.optional-dependencies]
+viz = ["pygame>=2.0.0"]
+dev = ["pytest>=7.0.0"]
+
+[project.scripts]
+rlbot = "rlbot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/SdSarthak/RL-Bots"
+
+[tool.setuptools]
+packages = ["rlbot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

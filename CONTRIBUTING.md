@@ -14,28 +14,47 @@ Thank you for your interest in contributing to the RL Bot project! This document
 
 1. Fork the repository
 2. Clone your fork locally
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run the project: `python main.py`
+3. Install dependencies: `pip install -r requirements-dev.txt`
+4. Run the tests: `python -m pytest`
+5. Run the project: `python main.py --headless`
 
 ## Development Setup
 
 ### Prerequisites
-- Python 3.7+
-- pygame
-- numpy
+- Python 3.8+
+- numpy (required)
+- pygame (only for the window; everything runs headless without it)
 
 ### Local Development
 ```bash
 # Clone your fork
-git clone https://github.com/yourusername/rl-bot.git
-cd rl-bot
+git clone https://github.com/yourusername/RL-Bots.git
+cd RL-Bots
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies, including pytest
+pip install -r requirements-dev.txt
+
+# Run the tests before and after your change
+python -m pytest
 
 # Run the project
-python main.py
+python main.py --headless
 ```
+
+### Where things live
+
+| Module | Responsibility |
+| --- | --- |
+| `rlbot/config.py` | Validated dataclass config and JSON load/save |
+| `rlbot/environment.py` | Grid dynamics, rewards, BFS shortest path |
+| `rlbot/agent.py` | Tabular Q-learning agent and Q-table persistence |
+| `rlbot/replay.py` | Episode replay buffer |
+| `rlbot/trainer.py` | Training loop, greedy rollouts, metrics |
+| `rlbot/visualizer.py` | Pygame and ASCII renderers |
+| `rlbot/cli.py` | Argument parsing and commands |
+
+Keep the algorithm free of rendering calls. The trainer takes a renderer
+callback, which is what lets the same loop run in CI and behind a window.
 
 ## How to Contribute
 
@@ -108,10 +127,15 @@ def calculate_reward(new_pos: tuple, visited: set, goal_pos: tuple) -> float:
 ```
 
 ### Configuration Guidelines
-- Keep all configuration parameters in the CONFIG section
-- Use descriptive names for parameters
-- Add comments explaining parameter effects
-- Provide reasonable default values
+- Add new tunables as fields on `rlbot.config.Config`, never as module-level constants
+- Validate the new field in `Config.validate` so bad values fail loudly and early
+- Give every field a sensible default; existing configs must keep working
+- Surface it on the CLI only if a user would plausibly change it per run
+
+### Testing Guidelines
+- Tests must be deterministic: seed every source of randomness
+- Tests must not need a display, a network connection or a downloaded dataset
+- Add a regression test with any bug fix
 
 ## Submitting Changes
 
