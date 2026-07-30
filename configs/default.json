@@ -1,0 +1,15 @@
+{
+  "grid_size": 6,
+  "red_start": [0, 0],
+  "blue_start": [0, 0],
+  "goal": [5, 5],
+  "obstacles": [],
+  "episodes": 80,
+  "max_steps": 200,
+  "alpha": 0.2,
+  "gamma": 0.95,
+  "epsilon_start": 1.0,
+  "epsilon_decay": 0.92,
+  "epsilon_min": 0.02,
+  "seed": 0
+}

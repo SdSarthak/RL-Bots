@@ -162,14 +162,40 @@ $RECYCLE.BIN/
 # Pygame specific
 *.pyc
 
-# Saved models or data
+# Saved models, weights and training artifacts
 models/
 data/
+dataset/
+datasets/
 logs/
+runs/
+outputs/
 checkpoints/
 saved_q_tables/
 *.pkl
 *.pickle
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.ckpt
+*.weights
+*.onnx
+*.tflite
+*.npz
+*.npy
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# Node / Dart tooling (kept so shared tooling never leaks in)
+node_modules/
+.dart_tool/
 
 # Screenshots or recordings
 screenshots/
