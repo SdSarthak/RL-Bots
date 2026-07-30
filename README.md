@@ -163,10 +163,12 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-94 tests, all deterministic and offline. They cover grid dynamics and obstacle
+104 tests, all deterministic and offline. They cover grid dynamics and obstacle
 handling, terminal-aware Q-updates, replay eviction and back-propagation,
 run-to-run reproducibility under a fixed seed, convergence to the BFS-optimal
-path on both an open board and a maze, artifact writing, and CLI exit codes.
+path on both an open board and a maze, artifact writing, CLI exit codes, and the
+renderers under SDL's dummy video driver. CI runs them on Python 3.8, 3.10 and
+3.12.
 
 ## Using it as a library
 
