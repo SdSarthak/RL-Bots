@@ -8,7 +8,7 @@ makes the dynamics easy to test without a training loop.
 from __future__ import annotations
 
 from collections import deque
-from typing import AbstractSet, Dict, Iterable, List, Optional, Tuple
+from typing import AbstractSet, Dict, Iterable, List, Optional
 
 from rlbot.config import ACTIONS, Config, Position
 
