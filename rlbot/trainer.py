@@ -245,6 +245,21 @@ def train(
     config = config or Config()
     config.validate()
     env = env or GridWorld(config)
+    # The env supplies the dynamics while ``config`` supplies the rewards and
+    # hyperparameters. If a caller passes an env built from a different config
+    # the two disagree silently and the run optimises a board it is not on.
+    if env.config is not config:
+        board = ("grid_size", "goal", "obstacles")
+        mismatched = [
+            key
+            for key in board
+            if getattr(env.config, key) != getattr(config, key)
+        ]
+        if mismatched:
+            raise ValueError(
+                "env was built from a different board than the training config; "
+                "mismatched: " + ", ".join(mismatched)
+            )
     starts = starts_for(config)
 
     unreachable = [name for name, s in starts.items() if env.optimal_steps(s) is None]

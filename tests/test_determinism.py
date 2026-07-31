@@ -152,6 +152,20 @@ def test_reaching_the_goal_still_collects_the_goal_reward():
 # ----------------------------------------------------------------------
 # train() argument checking
 # ----------------------------------------------------------------------
+def test_train_rejects_an_env_from_a_different_board():
+    """env supplies the dynamics, config the rewards; they must agree."""
+    config = Config(grid_size=4, goal=(3, 3), episodes=1)
+    other = GridWorld(Config(grid_size=4, goal=(3, 3), obstacles=[(1, 1)]))
+    with pytest.raises(ValueError, match="different board"):
+        train(config, env=other)
+
+
+def test_train_accepts_a_matching_env_built_separately():
+    config = Config(grid_size=4, goal=(3, 3), episodes=2)
+    env = GridWorld(Config(grid_size=4, goal=(3, 3), episodes=2))
+    assert len(train(config, env=env).history) == 2
+
+
 def test_train_rejects_agents_it_has_no_start_position_for():
     config = Config(grid_size=3, goal=(2, 2), episodes=1)
     env = GridWorld(config)
