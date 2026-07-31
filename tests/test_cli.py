@@ -122,3 +122,52 @@ def test_help_exits_cleanly(argv):
     with pytest.raises(SystemExit) as excinfo:
         main(argv)
     assert excinfo.value.code == 0
+
+
+def test_badly_typed_config_file_exits_cleanly(tmp_path, capsys):
+    """This used to escape as a raw TypeError from inside range()."""
+    path = tmp_path / "typo.json"
+    path.write_text('{"grid_size": "6"}', encoding="utf-8")
+    assert main(["show", "--headless", "--config", str(path)]) == 2
+    assert "Configuration error" in capsys.readouterr().err
+
+
+def test_nan_reward_in_a_config_file_exits_cleanly(tmp_path, capsys):
+    path = tmp_path / "nan.json"
+    path.write_text('{"goal_reward": NaN, "episodes": 2}', encoding="utf-8")
+    assert main(["train", "--headless", "--quiet", "--config", str(path)]) == 2
+    assert "Configuration error" in capsys.readouterr().err
+
+
+def test_replay_refuses_a_table_from_a_different_board(tmp_path, capsys):
+    """An 8x8 table on a 6x6 board used to 'succeed' on untrained values."""
+    save_dir = tmp_path / "big"
+    assert main([
+        "train", "--headless", "--quiet", "--episodes", "40",
+        "--grid-size", "8", "--seed", "0", "--save-dir", str(save_dir),
+    ]) in (0, 1)
+    capsys.readouterr()
+
+    assert main([
+        "replay", "--headless", "--load-dir", str(save_dir), "--grid-size", "4",
+    ]) == 2
+    err = capsys.readouterr().err
+    assert "Cannot replay" in err and "different board" in err
+
+
+def test_replay_reports_a_corrupt_table(tmp_path, capsys):
+    for name in ("red.json", "blue.json"):
+        (tmp_path / name).write_text("{not json", encoding="utf-8")
+    assert main(["replay", "--headless", "--load-dir", str(tmp_path)]) == 2
+    assert "not valid JSON" in capsys.readouterr().err
+
+
+def test_train_reports_an_unwritable_save_dir(tmp_path, capsys):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    code = main([
+        "train", "--headless", "--quiet", "--episodes", "3", "--grid-size", "4",
+        "--save-dir", str(blocker / "run"),
+    ])
+    assert code == 3
+    assert "saving to" in capsys.readouterr().err
