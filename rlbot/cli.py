@@ -251,36 +251,45 @@ def cmd_train(args: argparse.Namespace) -> int:
         )
         print(f"Episode {stats.episode:>4}/{config.episodes}  {parts}  eps={stats.epsilon:.3f}")
 
+    # The renderer owns an SDL window and an initialised pygame; anything that
+    # escapes from here used to leave both alive, which on Windows keeps a dead
+    # window on screen until the interpreter exits.
     try:
-        result = train(config, env=env, renderer=renderer, on_episode_end=report)
-    except KeyboardInterrupt:
+        try:
+            result = train(config, env=env, renderer=renderer, on_episode_end=report)
+        except KeyboardInterrupt:
+            print("\nInterrupted by user.", file=sys.stderr)
+            return 130
+
+        if result.interrupted:
+            print("\nTraining window closed; stopping early.", file=sys.stderr)
+
+        print("\nTraining summary:")
+        print(format_summary(result))
+
+        for name in result.agents:
+            series = result.steps_series(name)
+            if len(series) >= 20:
+                trend = moving_average([float(s) for s in series], window=10)
+                print(f"  {name:<5} steps moving avg: first10={trend[9]:.1f} last={trend[-1]:.1f}")
+
+        print("\nValidating greedy policies:")
+        outcomes = validate_policies(result)
+
+        if getattr(args, "save_dir", None):
+            try:
+                _save_artifacts(result, args.save_dir)
+            except OSError as exc:
+                print(f"Training finished but saving to {args.save_dir} failed: {exc}",
+                      file=sys.stderr)
+                return 3
+
+        if renderer is not None and not args.no_replay_demo and not result.interrupted:
+            from rlbot.visualizer import replay_paths
+
+            replay_paths(renderer, {n: r.path for n, r in outcomes.items()})
+    finally:
         close_renderer(renderer)
-        print("\nInterrupted by user.", file=sys.stderr)
-        return 130
-
-    if result.interrupted:
-        print("\nTraining window closed; stopping early.", file=sys.stderr)
-
-    print("\nTraining summary:")
-    print(format_summary(result))
-
-    for name in result.agents:
-        series = result.steps_series(name)
-        if len(series) >= 20:
-            trend = moving_average([float(s) for s in series], window=10)
-            print(f"  {name:<5} steps moving avg: first10={trend[9]:.1f} last={trend[-1]:.1f}")
-
-    print("\nValidating greedy policies:")
-    outcomes = validate_policies(result)
-
-    if getattr(args, "save_dir", None):
-        _save_artifacts(result, args.save_dir)
-
-    if renderer is not None and not args.no_replay_demo and not result.interrupted:
-        from rlbot.visualizer import replay_paths
-
-        replay_paths(renderer, {n: r.path for n, r in outcomes.items()})
-    close_renderer(renderer)
 
     return 0 if all(r.reached_goal for r in outcomes.values()) else 1
 
@@ -307,7 +316,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
     try:
         agents = load_agents(load_dir, env, config)
-    except (FileNotFoundError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         print(f"Cannot replay: {exc}", file=sys.stderr)
         return 2
 
@@ -324,8 +333,10 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if renderer is not None:
         from rlbot.visualizer import replay_paths
 
-        replay_paths(renderer, {n: r.path for n, r in rollouts.items()})
-        close_renderer(renderer)
+        try:
+            replay_paths(renderer, {n: r.path for n, r in rollouts.items()})
+        finally:
+            close_renderer(renderer)
     else:
         for name, rollout in rollouts.items():
             print(f"\n{name} path:")

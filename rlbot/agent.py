@@ -225,10 +225,16 @@ class QLearningAgent:
         path = Path(path)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except OSError as exc:
+        except FileNotFoundError as exc:
             raise FileNotFoundError(f"cannot read Q-table {path}: {exc}") from exc
+        except OSError as exc:
+            # A permission or decoding failure is not a missing file; reporting
+            # it as one sends the reader looking for the wrong problem.
+            raise OSError(f"cannot read Q-table {path}: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+        if not isinstance(data, dict):
+            raise ValueError(f"{path} must contain a JSON object at the top level")
         return self.load_state_dict(data)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid

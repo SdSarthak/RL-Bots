@@ -255,6 +255,12 @@ def train(
 
     rng = random.Random(config.seed)
     agents = agents or build_agents(env, config, rng)
+    missing = sorted(set(agents) - set(starts))
+    if missing:
+        raise ValueError(
+            "no start position for agent(s): " + ", ".join(missing) +
+            f"; known agents are {', '.join(sorted(starts))}"
+        )
     buffers = {
         name: ReplayBuffer(config.replay_buffer_size, rng=random.Random(rng.random()))
         for name in agents
@@ -355,10 +361,13 @@ def rollout_greedy(
             position, visited if avoid_visited else None, greedy=True
         )
         next_position = env.step(position, action)
-        total_reward += env.reward(next_position, visited)
         if next_position == position:
+            # Bumping a wall is not a step, so it must not be charged the step
+            # and revisit penalties -- doing so made a stuck rollout's reported
+            # total_reward depend on which wall it happened to face.
             reason = "stuck"
             break
+        total_reward += env.reward(next_position, visited)
         position = next_position
         path.append(position)
         if position in visited and not avoid_visited:
