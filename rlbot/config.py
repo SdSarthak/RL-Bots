@@ -8,6 +8,7 @@ override any subset of the fields.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
@@ -42,6 +43,48 @@ class ConfigError(ValueError):
     """Raised when a configuration is malformed or internally inconsistent."""
 
 
+def _as_int(value: Any, label: str) -> int:
+    """Coerce ``value`` into an ``int``.
+
+    JSON has one number type, so ``6.0`` is accepted while ``6.5`` is not.
+    Booleans are rejected outright: ``grid_size: true`` is a typo, not a 1.
+    Without this a bad value survives validation and blows up much later
+    inside ``range()`` with a message that says nothing about the config.
+    """
+    if isinstance(value, bool):
+        raise ConfigError(f"{label} must be an integer, got boolean {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            raise ConfigError(f"{label} must be a whole number, got {value!r}")
+        return int(value)
+    raise ConfigError(f"{label} must be an integer, got {type(value).__name__} {value!r}")
+
+
+def _as_float(value: Any, label: str) -> float:
+    """Coerce ``value`` into a finite ``float``.
+
+    ``NaN`` and ``Infinity`` are valid JSON as far as Python's decoder is
+    concerned, and a single NaN reward poisons every Q-value it ever touches,
+    so they are refused here rather than debugged later.
+    """
+    if isinstance(value, bool):
+        raise ConfigError(f"{label} must be a number, got boolean {value!r}")
+    if not isinstance(value, (int, float)):
+        raise ConfigError(f"{label} must be a number, got {type(value).__name__} {value!r}")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ConfigError(f"{label} must be finite, got {value!r}")
+    return number
+
+
+def _as_bool(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{label} must be true or false, got {value!r}")
+    return value
+
+
 def _as_position(value: Any, label: str) -> Position:
     """Coerce ``value`` into a ``(row, col)`` tuple of ints."""
     if isinstance(value, dict):
@@ -53,14 +96,50 @@ def _as_position(value: Any, label: str) -> Position:
         raise ConfigError(f"{label} must be a two-element sequence, got {value!r}")
     if len(value) != 2:
         raise ConfigError(f"{label} must have exactly two elements, got {value!r}")
-    try:
-        return (int(value[0]), int(value[1]))
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"{label} must contain integers, got {value!r}") from exc
+    # Whole numbers only: silently truncating (1.5, 2) to (1, 2) would move an
+    # obstacle or a goal without telling anyone.
+    return (_as_int(value[0], f"{label} row"), _as_int(value[1], f"{label} column"))
 
 
 def _as_positions(values: Iterable[Any], label: str) -> Tuple[Position, ...]:
     return tuple(_as_position(v, label) for v in values)
+
+
+# Field groups used by Config.coerce(). Kept next to the dataclass so a new
+# field that is not listed here shows up immediately in the round-trip test.
+_INT_FIELDS: Tuple[str, ...] = (
+    "grid_size",
+    "episodes",
+    "max_steps",
+    "no_progress_threshold",
+    "efficient_solution_threshold",
+    "max_test_steps",
+    "seed",
+    "replay_buffer_size",
+    "replay_frequency",
+    "replay_sample_size",
+    "cell_size",
+    "fps",
+)
+
+_FLOAT_FIELDS: Tuple[str, ...] = (
+    "goal_reward",
+    "step_penalty",
+    "revisit_penalty",
+    "loop_penalty",
+    "alpha",
+    "gamma",
+    "epsilon_start",
+    "epsilon_decay",
+    "epsilon_min",
+    "replay_alpha_scale",
+)
+
+_BOOL_FIELDS: Tuple[str, ...] = (
+    "show_training",
+    "print_episode_stats",
+    "print_replay_stats",
+)
 
 
 @dataclass
@@ -109,11 +188,31 @@ class Config:
     print_replay_stats: bool = True
 
     def __post_init__(self) -> None:
+        self.coerce()
+        self.validate()
+
+    # ------------------------------------------------------------------
+    # coercion
+    # ------------------------------------------------------------------
+    def coerce(self) -> "Config":
+        """Normalise every field to its declared type.
+
+        Runs before :meth:`validate` so the range checks compare numbers with
+        numbers. Skipping this step let a JSON file with ``"grid_size": "6"``
+        or ``"episodes": 2.5`` sail past validation and crash much later with a
+        ``TypeError`` from inside ``range()``.
+        """
+        for name in _INT_FIELDS:
+            setattr(self, name, _as_int(getattr(self, name), name))
+        for name in _FLOAT_FIELDS:
+            setattr(self, name, _as_float(getattr(self, name), name))
+        for name in _BOOL_FIELDS:
+            setattr(self, name, _as_bool(getattr(self, name), name))
         self.red_start = _as_position(self.red_start, "red_start")
         self.blue_start = _as_position(self.blue_start, "blue_start")
         self.goal = _as_position(self.goal, "goal")
         self.obstacles = _as_positions(self.obstacles, "obstacles")
-        self.validate()
+        return self
 
     # ------------------------------------------------------------------
     # validation
@@ -182,6 +281,19 @@ class Config:
         if self.replay_sample_size < 1:
             raise ConfigError(
                 f"replay_sample_size must be positive, got {self.replay_sample_size}"
+            )
+        if not 0.0 < self.replay_alpha_scale <= 1.0:
+            raise ConfigError(
+                f"replay_alpha_scale must be in (0, 1], got {self.replay_alpha_scale}"
+            )
+        if self.no_progress_threshold < 0:
+            raise ConfigError(
+                f"no_progress_threshold must not be negative, got {self.no_progress_threshold}"
+            )
+        if self.efficient_solution_threshold < 1:
+            raise ConfigError(
+                "efficient_solution_threshold must be positive, got "
+                f"{self.efficient_solution_threshold}"
             )
         if self.cell_size < 1:
             raise ConfigError(f"cell_size must be positive, got {self.cell_size}")
