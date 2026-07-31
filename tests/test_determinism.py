@@ -87,11 +87,25 @@ def test_agents_do_not_share_a_random_stream():
 # ----------------------------------------------------------------------
 # the reported policy must be the policy that runs
 # ----------------------------------------------------------------------
-def test_reported_policy_only_names_moves_the_agent_can_make():
-    result = train(MAZE)
+@pytest.mark.parametrize(
+    "config",
+    [
+        MAZE,
+        # Undertrained on purpose: while the goal reward has not reached a
+        # state, every real move there is negative and the untouched wall
+        # actions still sit at zero. A raw argmax named a wall move for 22 of
+        # this run's 63 states.
+        Config(grid_size=8, goal=(7, 7), episodes=8, max_steps=120, seed=3),
+    ],
+    ids=["converged", "undertrained"],
+)
+def test_reported_policy_only_names_moves_the_agent_can_make(config):
+    result = train(config)
     env = result.env
     for agent in result.agents.values():
-        for state, name in agent.policy().items():
+        policy = agent.policy()
+        assert policy
+        for state, name in policy.items():
             action = ACTION_NAMES.index(name)
             assert env.step(state, action) != state, (
                 f"{agent.name} policy at {state} says {name}, which walks into a wall"

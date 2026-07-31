@@ -125,9 +125,9 @@ class QLearningAgent:
         Restricted to :meth:`allowed_actions`, exactly like :meth:`select_action`.
         A plain ``argmax`` over the raw row reports moves the agent can never
         make -- walking into a wall or an obstacle -- because those actions keep
-        their zero initialisation while every real move is driven negative by
-        the step penalty. On the maze board that made most of the printed
-        policy disagree with the path the agent actually walks.
+        their zero initialisation while a real move is driven negative by the
+        step penalty until the goal reward reaches it. On a partly-converged
+        8x8 run that was 22 of 63 states.
         """
         out: Dict[Position, str] = {}
         for state in sorted(self.q):
